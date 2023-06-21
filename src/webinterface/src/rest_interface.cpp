@@ -55,7 +55,7 @@ void Web_CallBackFunc(const httplib::Request &req, httplib::Response &resp)
     if (rlt=="")
     {
         rlt = ip+":8550/command?action=stand(go|left|back)\n";
-        rlt = rlt+ip+":8550/command?meassage=battary(video|status)";
+        rlt = rlt+ip+":8550/command?message=status(video|status)";
     }
 
     resp.set_content(rlt, "text/plain");

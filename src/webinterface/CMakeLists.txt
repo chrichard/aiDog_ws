@@ -9,7 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
-set(protocol_DIR "/home/chen/cyberdog_ws/install/protocol/share/protocol/cmake")
+set(protocol_DIR "/home/chen/cyberdog_ws/install/protocol/share/protocol")
 find_package(protocol REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
@@ -29,11 +29,11 @@ endif()
 aux_source_directory(./src SOURCES)
 
 #add_executable(webinterface ${SOURCES})
-add_executable(webinterface src/rest_interface.cpp src/webinterface.cpp)
-ament_target_dependencies(webinterface rclcpp std_msgs protocol)
+add_executable(action src/rest_interface.cpp src/action.cpp)
+ament_target_dependencies(action rclcpp std_msgs protocol)
 
 install(TARGETS
-  webinterface
+  action
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
