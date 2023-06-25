@@ -15,7 +15,7 @@ find_package(image_transport REQUIRED)
 #find_package(OpenCV 4 REQUIRED)
 
 
-set(protocol_DIR "/home/chen/cyberdog_ws/install/protocol/share/protocol")
+#set(protocol_DIR "/home/chen/aiDog_ws/install/protocol/share/protocol")
 
 find_package(protocol REQUIRED)
 # uncomment the following section in order to fill in
