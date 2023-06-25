@@ -7,8 +7,8 @@
 #include <cv_bridge/cv_bridge.h>               // cv_bridge converts between ROS 2 image messages and OpenCV image representations.
 #include <image_transport/image_transport.hpp> // Using image_transport allows us to publish and subscribe to compressed image streams in ROS2
 #include <opencv2/opencv.hpp>                  // We include everything about OpenCV as we don't care much about compilation time at the moment.
-//#include <opencv2/imgproc/imgproc.hpp>
-//#include <opencv2/highgui/highgui.hpp>
+// #include <opencv2/imgproc/imgproc.hpp>
+// #include <opencv2/highgui/highgui.hpp>
 
 #include "protocol/msg/bms_status.hpp"
 #include "protocol/msg/motion_servo_cmd.hpp"
@@ -18,6 +18,8 @@
 #include "httplib.h"
 
 #include "rest_interface.h"
+
+#define CYBERDOG "/cyberdog"
 // protocol::msg::BmsStatus  ---> std_msgs::msg::String
 using std::placeholders::_1;
 int batt_volt;
@@ -31,14 +33,23 @@ public:
   MinimalSubscriber()
       : Node("minimal_subscriber")
   {
+    // 状态订阅
     statusSubscription = this->create_subscription<protocol::msg::BmsStatus>(
-        "/cyberdog/bms_status", rclcpp::SystemDefaultsQoS(), std::bind(&MinimalSubscriber::status_callback, this, _1));
+        CYBERDOG "/bms_status",
+        rclcpp::SystemDefaultsQoS(),
+        std::bind(&MinimalSubscriber::status_callback, this, _1));
 
-    // rmw_qos_profile_t custom_qos = rmw_qos_profile_default;
-    imgSubscription = image_transport::create_subscription(this, "/cyberdog/image",
-                                                           std::bind(&MinimalSubscriber::image_callback, this, std::placeholders::_1), "raw");
+    // AI摄像机订阅
+    imgSubscription = image_transport::create_subscription(
+        this,
+        CYBERDOG "/image",
+        std::bind(&MinimalSubscriber::image_callback, this, std::placeholders::_1),
+        "raw");
 
-    publisher = this->create_publisher<protocol::msg::MotionServoCmd>("/cyberdog/motion_servo_cmd", 10);
+    // 动作发布
+    publisher = this->create_publisher<protocol::msg::MotionServoCmd>(
+        CYBERDOG "/motion_servo_cmd",
+        10);
   }
 
   void sendAction(string param)
@@ -67,16 +78,17 @@ private:
     try
     {
       cv_ptr = cv_bridge::toCvCopy(msg, msg->encoding);
+      cv::imshow("AI_CAMARE", cv_ptr->image);
+      cv::waitKey(10);
     }
     catch (cv_bridge::Exception &e)
     {
       RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
-      return;
+      //return;
     }
-
-    cv::imshow("OPENCV_WINDOW", cv_ptr->image);
-    cv::waitKey(3);
   }
+
+private:
   rclcpp::Subscription<protocol::msg::BmsStatus>::SharedPtr statusSubscription;
   image_transport::Subscriber imgSubscription;
   rclcpp::Publisher<protocol::msg::MotionServoCmd>::SharedPtr publisher;
@@ -118,14 +130,11 @@ void http_thread()
 {
   ip = get_ip("eno1");
   if (ip == "127.0.0.1")
-  {
     ip = get_ip("ens33");
-  }
-
   if (ip == "127.0.0.1")
-  {
     ip = get_ip("waln0");
-  }
+  if (ip == "127.0.0.1")
+    ip = get_ip("wlo1");
 
   httplib::Server http_svr;
   http_svr.Get("/command", Web_CallBackFunc);
@@ -143,12 +152,8 @@ void http_thread()
 
 int main(int argc, char *argv[])
 {
-
   std::thread restapi = std::thread(http_thread);
   rclcpp::init(argc, argv);
-
-  // cv::namedWindow("OPENCV_WINDOW");
-  // cv::startWindowThread();
 
   actionNode = std::make_shared<MinimalSubscriber>();
   rclcpp::spin(actionNode);
