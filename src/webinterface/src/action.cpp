@@ -1,4 +1,5 @@
 #include <memory>
+#include <chrono>
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -7,8 +8,8 @@
 #include <cv_bridge/cv_bridge.h>               // cv_bridge converts between ROS 2 image messages and OpenCV image representations.
 #include <image_transport/image_transport.hpp> // Using image_transport allows us to publish and subscribe to compressed image streams in ROS2
 #include <opencv2/opencv.hpp>                  // We include everything about OpenCV as we don't care much about compilation time at the moment.
-// #include <opencv2/imgproc/imgproc.hpp>
-// #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 #include "protocol/msg/bms_status.hpp"
 #include "protocol/msg/motion_servo_cmd.hpp"
@@ -16,8 +17,6 @@
 #include "pubdef.h"
 
 #include "httplib.h"
-
-#include "rest_interface.h"
 
 #define CYBERDOG "/cyberdog"
 // protocol::msg::BmsStatus  ---> std_msgs::msg::String
@@ -33,11 +32,19 @@ public:
   MinimalSubscriber()
       : Node("minimal_subscriber")
   {
+    timer = this->create_wall_timer(
+        40ms, std::bind(&MinimalSubscriber::timer_callback, this));
+
     // 状态订阅
     statusSubscription = this->create_subscription<protocol::msg::BmsStatus>(
         CYBERDOG "/bms_status",
         rclcpp::SystemDefaultsQoS(),
         std::bind(&MinimalSubscriber::status_callback, this, _1));
+
+    // 动作发布
+    publisher = this->create_publisher<protocol::msg::MotionServoCmd>(
+        CYBERDOG "/motion_servo_cmd",
+        10);
 
     // AI摄像机订阅
     imgSubscription = image_transport::create_subscription(
@@ -46,10 +53,11 @@ public:
         std::bind(&MinimalSubscriber::image_callback, this, std::placeholders::_1),
         "raw");
 
-    // 动作发布
-    publisher = this->create_publisher<protocol::msg::MotionServoCmd>(
-        CYBERDOG "/motion_servo_cmd",
-        10);
+    imagePublisher = image_transport::create_publisher(
+        this,
+        CYBERDOG "/image");
+
+    capture.open(0);
   }
 
   void sendAction(string param)
@@ -66,6 +74,29 @@ public:
   }
 
 private:
+  void timer_callback()
+  {
+    cv::Mat image;
+    capture >> image;
+    /*
+    cv::Mat image = cv::imread("/home/chen/OIP-C.jpeg", 1);
+    auto now = std::chrono::system_clock::now();
+    // 通过不同精度获取相差的毫秒数
+    uint64_t dis_millseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() - std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count() * 1000;
+    time_t tt = std::chrono::system_clock::to_time_t(now);
+    auto time_tm = localtime(&tt);
+    char strTime[25] = {0};
+    sprintf(strTime, "%d-%02d-%02d %02d:%02d:%02d %03d", time_tm->tm_year + 1900,
+            time_tm->tm_mon + 1, time_tm->tm_mday, time_tm->tm_hour,
+            time_tm->tm_min, time_tm->tm_sec, (int)dis_millseconds);
+
+    putText(image, strTime, Point(0, 20), cv::FONT_HERSHEY_SIMPLEX, 1, Scalar(0, 0, 255), 4, 8);
+    */
+    sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", image)
+                                                 .toImageMsg();
+
+    imagePublisher.publish(msg);
+  }
   void status_callback(const protocol::msg::BmsStatus &msg) const
   {
     batt_volt = msg.batt_volt;
@@ -84,14 +115,17 @@ private:
     catch (cv_bridge::Exception &e)
     {
       RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
-      //return;
+      // return;
     }
   }
 
 private:
   rclcpp::Subscription<protocol::msg::BmsStatus>::SharedPtr statusSubscription;
-  image_transport::Subscriber imgSubscription;
   rclcpp::Publisher<protocol::msg::MotionServoCmd>::SharedPtr publisher;
+  image_transport::Subscriber imgSubscription;
+  image_transport::Publisher imagePublisher;
+  rclcpp::TimerBase::SharedPtr timer;
+  VideoCapture capture;
 };
 
 std::shared_ptr<MinimalSubscriber> actionNode;
